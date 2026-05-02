@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cttimegate</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+  #err {
+    position: fixed; inset: 0; padding: 1rem;
+    color: #f88; background: rgba(0,0,0,.85);
+    font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap;
+    display: none; overflow: auto;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<pre id="err"></pre>
+
+<script id="vs" type="x-shader/x-vertex">#version 300 es
+in vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+</script>
+
+<script id="fs-header" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+precision highp int;
+uniform vec3  iResolution;
+uniform float iTime;
+uniform float iTimeDelta;
+uniform int   iFrame;
+uniform vec4  iMouse;
+out vec4 _fragColor;
+</script>
+
+<script id="fs-footer" type="x-shader/x-fragment">
+void main() { mainImage(_fragColor, gl_FragCoord.xy); }
+</script>
+
+<script>
+(async () => {
+  const canvas = document.getElementById('c');
+  const errBox = document.getElementById('err');
+  const showError = (msg) => { errBox.textContent = msg; errBox.style.display = 'block'; console.error(msg); };
+
+  const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: false });
+  if (!gl) { showError('WebGL2 not available in this browser.'); return; }
+
+  const userSource = await fetch('timegate.glsl', { cache: 'no-store' }).then(r => {
+    if (!r.ok) throw new Error(`Failed to load timegate.glsl: ${r.status}`);
+    return r.text();
+  }).catch(e => { showError(String(e)); throw e; });
+
+  const vsSrc = document.getElementById('vs').textContent.trim();
+  const fsSrc = [
+    document.getElementById('fs-header').textContent.trim(),
+    userSource,
+    document.getElementById('fs-footer').textContent.trim(),
+  ].join('\n');
+
+  const compile = (type, src) => {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(sh);
+      gl.deleteShader(sh);
+      throw new Error(`Shader compile error:\n${log}`);
+    }
+    return sh;
+  };
+
+  let prog;
+  try {
+    const vs = compile(gl.VERTEX_SHADER, vsSrc);
+    const fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+    prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      throw new Error(`Link error:\n${gl.getProgramInfoLog(prog)}`);
+    }
+  } catch (e) { showError(e.message); return; }
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, 'a_pos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes   = gl.getUniformLocation(prog, 'iResolution');
+  const uTime  = gl.getUniformLocation(prog, 'iTime');
+  const uDelta = gl.getUniformLocation(prog, 'iTimeDelta');
+  const uFrame = gl.getUniformLocation(prog, 'iFrame');
+  const uMouse = gl.getUniformLocation(prog, 'iMouse');
+
+  const mouse = { x: 0, y: 0, clickX: 0, clickY: 0, down: false };
+  canvas.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    mouse.x = (e.clientX - r.left) * (canvas.width  / r.width);
+    mouse.y = canvas.height - (e.clientY - r.top) * (canvas.height / r.height);
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    mouse.down = true; mouse.clickX = mouse.x; mouse.clickY = mouse.y;
+  });
+  window.addEventListener('mouseup', () => { mouse.down = false; });
+
+  const resize = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.floor(window.innerWidth  * dpr);
+    const h = Math.floor(window.innerHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+    }
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  };
+  window.addEventListener('resize', resize);
+  resize();
+
+  gl.useProgram(prog);
+  const t0 = performance.now();
+  let lastT = 0, frame = 0;
+
+  const draw = () => {
+    resize();
+    const t = (performance.now() - t0) / 1000;
+    const dt = t - lastT; lastT = t;
+    gl.uniform3f(uRes, canvas.width, canvas.height, 1.0);
+    gl.uniform1f(uTime, t);
+    gl.uniform1f(uDelta, dt);
+    gl.uniform1i(uFrame, frame++);
+    gl.uniform4f(uMouse,
+      mouse.x, mouse.y,
+      mouse.down ? mouse.clickX : -mouse.clickX,
+      mouse.down ? mouse.clickY : -mouse.clickY);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

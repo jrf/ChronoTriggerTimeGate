@@ -1,0 +1,6 @@
+# cttimegate runtime dependencies
+#
+# The local dev server (serve.py) uses only the Python 3 standard library
+# (http.server, socketserver). No external packages are required.
+#
+# Tested with: Python 3.9+
