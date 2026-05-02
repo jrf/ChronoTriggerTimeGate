@@ -67,21 +67,18 @@ def render_frames(width: int, height: int, n_frames: int, fps: float):
     return frames
 
 
-def quantize_to_palette(frames):
-    """Quantize all frames to a shared 256-color palette so the GIF doesn't flicker.
+def quantize_per_frame(frames):
+    """Quantize each frame to its own 256-color palette with Floyd-Steinberg dither.
 
-    Builds the palette from a max-of-all-frames composite — taking the
-    per-pixel max across the loop ensures the bright peaks (which occur
-    only briefly in any single frame) get representation in the 256-color
-    palette, instead of being crushed into the dark-navy majority.
+    A shared cross-frame palette caps total color variety at 256 for the
+    entire loop, which crushes the bright vortex peaks. Per-frame palettes
+    give each frame its own optimal 256 colors — so peaks that only appear
+    in a few frames still get accurate representation.
     """
-    composite = np.zeros((*frames[0].size[::-1], 3), dtype=np.uint8)
-    for f in frames:
-        arr = np.asarray(f, dtype=np.uint8)
-        composite = np.maximum(composite, arr)
-    palette_src = Image.fromarray(composite, mode="RGB")
-    palette_img = palette_src.convert("P", palette=Image.Palette.ADAPTIVE, colors=256)
-    return [f.quantize(palette=palette_img, dither=Image.Dither.FLOYDSTEINBERG) for f in frames]
+    return [
+        f.quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
+        for f in frames
+    ]
 
 
 def main():
@@ -96,7 +93,7 @@ def main():
     frames = render_frames(width, height, n_frames, fps)
 
     print("Quantizing palette...")
-    palette_frames = quantize_to_palette(frames)
+    palette_frames = quantize_per_frame(frames)
 
     print(f"Writing {OUT_PATH.name}...")
     palette_frames[0].save(

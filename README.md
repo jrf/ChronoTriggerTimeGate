@@ -1,4 +1,4 @@
-# cttimegate
+# Chrono Trigger Time Gate
 
 A WebGL2 recreation of the Chrono Trigger time gate sprite effect, written as a Shadertoy-style GLSL fragment shader. The shader procedurally renders a pixelated blue portal with a spinning vortex and bands of light flowing into it.
 
