@@ -1,6 +1,10 @@
-# cttimegate runtime dependencies
+# cttimegate dependencies
 #
-# The local dev server (serve.py) uses only the Python 3 standard library
-# (http.server, socketserver). No external packages are required.
+# - The local dev server (serve.py) uses only the Python 3 standard library.
+# - The GIF generator (capture.py) needs moderngl + Pillow.
 #
 # Tested with: Python 3.9+
+
+moderngl>=5.10
+Pillow>=10.0
+numpy

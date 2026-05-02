@@ -25,10 +25,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         sys.stderr.write(f"{self.address_string()} {fmt % args}\n")
 
 
+class Server(socketserver.ThreadingTCPServer):
+    # Must be set on the class before bind() runs in __init__.
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    with socketserver.ThreadingTCPServer(("127.0.0.1", port), Handler) as httpd:
-        httpd.allow_reuse_address = True
+    try:
+        httpd = Server(("127.0.0.1", port), Handler)
+    except OSError as e:
+        if e.errno == 48:  # EADDRINUSE
+            sys.stderr.write(
+                f"Port {port} is already in use.\n"
+                f"  Find the holder: lsof -nP -iTCP:{port} -sTCP:LISTEN\n"
+                f"  Or pick another: python3 serve.py {port + 1}\n"
+            )
+            sys.exit(1)
+        raise
+
+    with httpd:
         print(f"Serving cttimegate at http://localhost:{port}  (Ctrl+C to stop)")
         try:
             httpd.serve_forever()
